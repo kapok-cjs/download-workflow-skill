@@ -3,7 +3,11 @@ name: download-workflow-skill
 description: 从runninghub.cn、liblib.art下载comfyui工作流。在用户提到下载工作流时使用。
 author: cjs@kapokcloud.com
 version: 0.0.1
-tags: [comfyui, workflow, runninghub, liblib]
+platforms: [linux, macos, windows]
+metadata:
+    hermes:
+        tags: [comfyui, workflow, runninghub, liblib]
+        related_skills: []
 ---
 
 # 下载工作流
