@@ -1,7 +1,9 @@
 ---
-name:download-workflow
-description:从runninghub.cn、liblib.art下载comfyui工作流。在用户提到下载工作流时使用。
-metadata: { "openclaw": { "emoji": "📑", "requires": { "bins": ["python3"], "env":["LAIMIAOAI_API_KEY"]},"primaryEnv":"LAIMIAOAI_API_KEY" } }
+name: download-workflow-skill
+description: 从runninghub.cn、liblib.art下载comfyui工作流。在用户提到下载工作流时使用。
+author: cjs@kapokcloud.com
+version: 0.0.1
+tags: [comfyui, workflow, runninghub, liblib]
 ---
 
 # 下载工作流
