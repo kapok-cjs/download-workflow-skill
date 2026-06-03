@@ -10,9 +10,9 @@ from playwright.sync_api import sync_playwright
 
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-WORKFLOW_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "workflow"))
-INPUT_FILE = os.path.join(WORKFLOW_DIR, "liblib_workflow.json")
-USER_DATA_DIR = os.path.join(WORKFLOW_DIR, ".playwright_liblib_data")
+WORK_DIR = os.environ.get("WORKDIR", os.path.abspath(os.path.join(SCRIPT_DIR, "..", "work")))
+INPUT_FILE = os.path.join(WORK_DIR, "liblib_workflow.json")
+USER_DATA_DIR = os.path.join(WORK_DIR, ".playwright_liblib_data")
 
 HOME_URL = "https://www.liblib.art"
 
@@ -131,7 +131,7 @@ def main():
 
     token = get_token_from_cookie()
 
-    os.makedirs(WORKFLOW_DIR, exist_ok=True)
+    os.makedirs(WORK_DIR, exist_ok=True)
 
     success = 0
     fail = 0
@@ -149,7 +149,7 @@ def main():
             continue
 
         safe_name = "".join(c if c.isalnum() or c in " _-()（）" else "_" for c in name).strip()
-        filepath = os.path.join(WORKFLOW_DIR, f"{uid}_{safe_name}.json")
+        filepath = os.path.join(WORK_DIR, "workflow", f"{uid}_{safe_name}.json")
         print(f"  下载中... {download_url[:80]}...")
         if download_file(download_url, filepath):
             print(f"  保存成功: {os.path.basename(filepath)}")
@@ -158,7 +158,7 @@ def main():
             fail += 1
 
     print(f"\n完成: 成功 {success} 个, 失败 {fail} 个")
-    print(f"保存目录: {WORKFLOW_DIR}")
+    print(f"保存目录: {WORK_DIR}")
 
 
 if __name__ == "__main__":

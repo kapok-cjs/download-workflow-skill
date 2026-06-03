@@ -10,9 +10,9 @@ from playwright.sync_api import sync_playwright
 
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-WORKFLOW_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "workflow"))
-INPUT_FILE = os.path.join(WORKFLOW_DIR, "runninghub_workflow.json")
-USER_DATA_DIR = os.path.join(WORKFLOW_DIR, ".playwright_runninghub_data")
+WORK_DIR = os.environ.get("WORKDIR", os.path.abspath(os.path.join(SCRIPT_DIR, "..", "work")))
+INPUT_FILE = os.path.join(WORK_DIR, "runninghub_workflow.json")
+USER_DATA_DIR = os.path.join(WORK_DIR, ".playwright_runninghub_data")
 
 EXPORT_URL = "https://www.runninghub.cn/api/workflow/export"
 HOME_URL = "https://www.runninghub.cn"
@@ -113,7 +113,7 @@ def download_workflow(token, workflow):
 
         # 保存到文件
         safe_name = "".join(c if c.isalnum() or c in " _-()（）" else "_" for c in name)
-        filepath = os.path.join(WORKFLOW_DIR, f"{workflow_id}_{safe_name}.json")
+        filepath = os.path.join(WORK_DIR, "workflow", f"{workflow_id}_{safe_name}.json")
         with open(filepath, "wb") as f:
             f.write(content)
         return True
@@ -133,7 +133,7 @@ def main():
 
     token = get_token_from_browser()
 
-    os.makedirs(WORKFLOW_DIR, exist_ok=True)
+    os.makedirs(WORK_DIR, exist_ok=True)
 
     success = 0
     fail = 0
@@ -147,7 +147,7 @@ def main():
             print(f"  下载失败")
 
     print(f"\n完成: 成功 {success} 个, 失败 {fail} 个")
-    print(f"保存目录: {WORKFLOW_DIR}")
+    print(f"保存目录: {WORK_DIR}")
 
 
 if __name__ == "__main__":

@@ -8,7 +8,8 @@ import os
 
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_FILE = os.path.join(SCRIPT_DIR, "..", "workflow", "runninghub_workflow.json")
+WORK_DIR = os.environ.get("WORKDIR", os.path.join(SCRIPT_DIR, "..", "work"))
+OUTPUT_FILE = os.path.join(WORK_DIR, "runninghub_workflow.json")
 
 
 def search_workflow(keyword, size=30, page=1):

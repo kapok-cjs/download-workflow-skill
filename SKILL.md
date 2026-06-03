@@ -17,31 +17,54 @@ metadata:
 ## 工作流程
 
 1.  **用户提供关键词**
-2. **智能体咨询**："使用liblib.art搜索还是running.cn搜索？"
-3. **liblib.art** -> `python3 scripts/search_liblib.py`、`python3 scripts/download_liblib.py`
-4. **runninghub.cn** -> `python3 scripts/search_runninghub.py`、`python3 scripts/download_runninghub.py`
+2.  **智能体询问**: "成果工作目录指向？"
+3.  **智能体询问**："使用liblib.art搜索还是running.cn搜索？"
+4.  **liblib.art** -> `python3 scripts/search_workflow_liblib.py`、`python3 scripts/download_workflow_liblib.py` 、`python3 scripts/missing_model_gpuserver.py`、`python3 scripts/search_model_liblib.py`、`python3 scripts/download_model_liblib.py`
+5.  **runninghub.cn** -> `python3 scripts/search_workflow_runninghub.py`、`python3 scripts/download_workflow_runninghub.py`、`python3 scripts/missing_model_gpuserver.py`、`python3 scripts/search_model_runninghub.py`、`python3 scripts/download_model_runninghub.py`
+6.  **对比服务器找出缺失模型，搜索下载模型** -> `python3 scripts/download_model.py`
 
 ## scripts
 
-* `scripts/search_liblib.py` - 搜索liblib.art
-* `scripts/search_runninghub.py` - 搜索runninghub.cn
-* `scripts/download_liblib.py` - 下载liblib工作流
-* `scripts/download_runninghub.py` - 下载runninghub工作流
+* `scripts/search_workflow_liblib.py` - 搜索工作流liblib.art
+* `scripts/search_workflow_runninghub.py` - 搜索工作流runninghub.cn
+* `scripts/download_workflow_liblib.py` - 下载liblib工作流
+* `scripts/download_workflow_runninghub.py` - 下载runninghub工作流
+* `scripts/missing_model_gpuserver.py` - 对比服务器找出缺失模型，需要提供gpu server服务器ssh ip、用户名、密码
+* `scripts/search_model_liblib.py` - 搜索模型liblib.art
+* `scripts/search_model_runninghub.py` - 搜索模型runninghub.cn
+* `scripts/download_model_liblib.py` - 下载模型liblib.art
+* `scripts/download_model_runninghub.py` - 下载模型runninghub.cn
 
 ## 使用说明
 
 ```bash
 # 搜索runninghub.cn
-python3 scripts/search_runninghub.py "longcat"
+python3 scripts/search_workflow_runninghub.py "longcat"
 
 # 搜索liblib.art
-python3 scripts/search_liblib.py "longcat"
+python3 scripts/search_workflow_liblib.py "longcat"
 
 # 下载runninghub.cn工作流
-python3 scripts/download_runninghub.py
+python3 scripts/download_workflow_runninghub.py
 
 # 下载liblib.art工作流
-python3 scripts/download_liblib.py
+python3 scripts/download_workflow_liblib.py
+
+# 对比服务器找出缺失模型
+python3 scripts/missing_model_gpuserver.py
+
+# 搜索模型liblib.art
+python3 scripts/search_model_liblib.py
+
+# 搜索模型runninghub.cn
+python3 scripts/search_model_runninghub.py
+
+# 下载模型liblib.art
+python3 scripts/download_model_liblib.py
+
+# 下载模型runninghub.cn
+python3 scripts/download_model_runninghub.py
+
 
 ```
 
