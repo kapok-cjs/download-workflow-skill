@@ -1,9 +1,11 @@
 #!/usr/bin/python3
-"""分析 ComfyUI workflow JSON，找出缺失模型，通过 SSH 在 GPU 服务器上 wget 下载"""
+"""读取 mission_model.json，在 GPU 服务器上 wget 下载缺失模型"""
 
 import json
 import os
 import sys
+import time
+from urllib.parse import urlparse
 
 import paramiko
 from paramiko.ssh_exception import AuthenticationException
@@ -12,7 +14,7 @@ from paramiko.ssh_exception import AuthenticationException
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 WORK_DIR = os.environ.get("WORKDIR", os.path.abspath(os.path.join(SCRIPT_DIR, "..", "work")))
 WORKFLOW_DIR = os.path.join(WORK_DIR, "workflow")
-MODEL_URLS_FILE = os.path.join(WORK_DIR, "model_urls.json")
+MISSION_FILE = os.path.join(WORK_DIR, "mission_model.json")
 
 # 模型类型 -> GPU 服务器存放目录
 MODEL_DIR_MAP = {
@@ -29,7 +31,7 @@ MODEL_DIR_MAP = {
     "embeddings":      "/data/models/embeddings",
 }
 
-# ComfyUI 节点类型 -> (模型类别, 模型文件名在 widget_values 中的索引)
+# ComfyUI 节点类型 -> (模型类别, 索引)
 NODE_MODEL_MAP = {
     "CheckpointLoaderSimple":       ("checkpoints", 0),
     "CheckpointLoader":             ("checkpoints", 0),
@@ -47,32 +49,29 @@ NODE_MODEL_MAP = {
     "CLIPVisionLoader":             ("clip_vision", 0),
 }
 
-
-def load_model_urls():
-    """加载 model_urls.json 映射表 {filename: download_url}"""
-    if os.path.exists(MODEL_URLS_FILE):
-        with open(MODEL_URLS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
+# 跳过下载的平台内置域名
+SKIP_DOMAINS = {"liblib.art", "runninghub.cn", "liblib.cloud", "liblibai-online.liblib.cloud"}
 
 
-def parse_workflow_files():
+def parse_workflow_files(workflow_dir=None):
     """扫描 workflow 目录下所有 JSON，提取模型引用"""
-    models = {}  # category -> set of filenames
+    if workflow_dir is None:
+        workflow_dir = WORKFLOW_DIR
+    models = {}
 
-    if not os.path.isdir(WORKFLOW_DIR):
-        print(f"工作流目录不存在: {WORKFLOW_DIR}")
+    if not os.path.isdir(workflow_dir):
+        print(f"工作流目录不存在: {workflow_dir}")
         return models
 
-    json_files = [f for f in os.listdir(WORKFLOW_DIR) if f.endswith(".json")]
+    json_files = [f for f in os.listdir(workflow_dir) if f.endswith(".json")]
     if not json_files:
-        print(f"工作流目录下无 JSON 文件: {WORKFLOW_DIR}")
+        print(f"工作流目录下无 JSON 文件: {workflow_dir}")
         return models
 
     print(f"扫描 {len(json_files)} 个工作流文件...\n")
 
     for fname in json_files:
-        filepath = os.path.join(WORKFLOW_DIR, fname)
+        filepath = os.path.join(workflow_dir, fname)
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -88,10 +87,7 @@ def parse_workflow_files():
 
 
 def _extract_models(data):
-    """从单个 workflow JSON 中提取模型引用"""
     result = {}
-
-    # 从 nodes 数组提取
     nodes = data.get("nodes", [])
     if isinstance(nodes, list):
         for node in nodes:
@@ -99,7 +95,6 @@ def _extract_models(data):
                 continue
             _extract_from_node(node, result)
 
-    # 也从顶层直接获取 (某些导出格式)
     for key in ("checkpoint", "ckpt", "vae", "lora"):
         if key in data:
             val = data[key]
@@ -111,11 +106,9 @@ def _extract_models(data):
 
 
 def _extract_from_node(node, result):
-    """从单个节点提取模型名"""
     ntype = node.get("type", "")
     wvals = node.get("widgets_values", [])
 
-    # 精确匹配
     if ntype in NODE_MODEL_MAP:
         cat, idx = NODE_MODEL_MAP[ntype]
         if isinstance(wvals, list) and len(wvals) > idx:
@@ -124,7 +117,6 @@ def _extract_from_node(node, result):
                 result.setdefault(cat, set()).add(name)
         return
 
-    # 模糊匹配：节点类型包含关键词
     ntype_lower = ntype.lower()
     if "lora" in ntype_lower:
         if isinstance(wvals, list) and len(wvals) > 0 and isinstance(wvals[0], str):
@@ -138,6 +130,53 @@ def _extract_from_node(node, result):
     elif "checkpoint" in ntype_lower or "ckpt" in ntype_lower:
         if isinstance(wvals, list) and len(wvals) > 0 and isinstance(wvals[0], str):
             result.setdefault("checkpoints", set()).add(wvals[0])
+
+
+def load_mission():
+    """读取 mission_model.json"""
+    if not os.path.exists(MISSION_FILE):
+        print(f"文件不存在: {MISSION_FILE}")
+        print("请先运行 missing_model_gpuserver.py 和 analysis_mission_model.py")
+        return None
+    with open(MISSION_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def build_download_list(mission):
+    """从 mission_model.json 提取待下载列表（有url且非平台域名）"""
+    missing = mission.get("missing", {})
+    download_list = []
+
+    for cat, entries in missing.items():
+        remote_dir = MODEL_DIR_MAP.get(cat)
+        if not remote_dir:
+            print(f"  [跳过] 未知类别 {cat}")
+            continue
+
+        for entry in entries:
+            name = entry.get("name", "")
+            url = entry.get("url", "")
+            source = entry.get("source", "")
+
+            if not url:
+                continue
+
+            # 跳过平台内置来源
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+            if any(skip in domain for skip in SKIP_DOMAINS):
+                print(f"  [跳过-平台源] {name} -> {source}")
+                continue
+
+            download_list.append({
+                "name": name,
+                "url": url,
+                "category": cat,
+                "remote_dir": remote_dir,
+                "source": source,
+            })
+
+    return download_list
 
 
 def ssh_input():
@@ -175,135 +214,85 @@ def ssh_connect(host, port, user, pwd):
         sys.exit(f"SSH 连接失败: {e}")
 
 
-def check_remote_models(ssh_client, models):
-    """检查 GPU 服务器上已存在的模型文件"""
-    existing = {}  # category -> set of existing filenames
-
-    for cat, names in models.items():
-        remote_dir = MODEL_DIR_MAP.get(cat)
-        if not remote_dir:
-            print(f"  [跳过] 未知类别 {cat} -> 无对应目录")
-            continue
-
-        existing.setdefault(cat, set())
-
-        for name in names:
-            path = f"{remote_dir}/{name}"
-            _, stdout, _ = ssh_client.exec_command(f"test -f '{path}' && echo EXISTS || echo MISSING")
-            output = stdout.read().decode().strip()
-            if output == "EXISTS":
-                existing[cat].add(name)
-
-    return existing
-
-
-def wget_download(ssh_client, cat, name, url, remote_dir):
+def wget_download(ssh_client, name, url, remote_dir):
     """在 GPU 服务器上执行 wget -c 断点续传下载"""
     filepath = f"{remote_dir}/{name}"
     cmd = f"wget -c -O '{filepath}' '{url}'"
-    print(f"    执行: wget -c -O '{filepath}' ...")
-    stdin, stdout, stderr = ssh_client.exec_command(cmd, timeout=1200)
+    print(f"  wget -c -O '{filepath}'")
+    stdin, stdout, stderr = ssh_client.exec_command(cmd, timeout=3600)
     exit_code = stdout.channel.recv_exit_status()
     if exit_code == 0:
-        print(f"    下载完成")
+        print(f"  下载完成")
         return True
     else:
-        err = stderr.read().decode()[:200]
-        print(f"    下载失败 (exit={exit_code}): {err}")
+        err = stderr.read().decode()[:300]
+        print(f"  下载失败 (exit={exit_code}): {err}")
         return False
 
 
 def main():
     print("=" * 60)
-    print("ComfyUI 模型缺失检测 & GPU 服务器下载工具")
+    print("  模型下载工具 (基于 mission_model.json)")
     print("=" * 60 + "\n")
 
-    # 1. 解析工作流文件
-    models = parse_workflow_files()
-    if not models:
-        print("未找到任何模型引用")
+    # 1. 加载 mission_model.json
+    mission = load_mission()
+    if not mission:
         return
 
-    total_models = sum(len(v) for v in models.values())
-    print(f"共提取到 {total_models} 个模型引用：")
-    for cat in sorted(models.keys()):
-        names = sorted(models[cat])
-        print(f"  [{cat}] ({len(names)} 个)")
-        for n in names:
-            print(f"    - {n}")
-    print()
+    if mission.get("status") != "missing":
+        print("mission_model.json 状态不是 missing，无需下载")
+        return
 
-    # 2. 连接 GPU 服务器
+    # 2. 构建下载列表
+    download_list = build_download_list(mission)
+
+    if not download_list:
+        print("没有可下载的模型（所有 URL 为空或来自平台内置源）")
+        return
+
+    # 3. 打印待下载清单
+    print(f"待下载 {len(download_list)} 个模型:\n")
+    for item in download_list:
+        print(f"  [{item['category']}] {item['name']}")
+        print(f"    url: {item['url'][:100]}...")
+        print(f"    source: {item['source']}")
+        print(f"    dir: {item['remote_dir']}")
+        print()
+
+    answer = input("确认开始下载？(y/n): ").strip().lower()
+    if answer != "y":
+        return
+
+    # 4. 连接 GPU 服务器
     host, port, user, pwd = ssh_input()
     print()
     ssh = ssh_connect(host, port, user, pwd)
 
-    # 3. 检查远程已有模型
-    print("正在检查 GPU 服务器上已有模型...\n")
-    existing = check_remote_models(ssh, models)
-
-    # 4. 计算缺失
-    missing = {}
-    for cat, names in models.items():
-        exist_set = existing.get(cat, set())
-        miss = [n for n in names if n not in exist_set]
-        if miss:
-            missing[cat] = sorted(miss)
-
-    if not missing:
-        print("所有模型已存在于 GPU 服务器上，无需下载。")
-        ssh.close()
-        return
-
-    miss_total = sum(len(v) for v in missing.values())
-    print("缺失模型列表:")
-    for cat in sorted(missing.keys()):
-        remote_dir = MODEL_DIR_MAP.get(cat, "???")
-        print(f"  [{cat}] -> {remote_dir}")
-        for n in missing[cat]:
-            print(f"    - {n}")
-    print(f"\n共缺失 {miss_total} 个模型\n")
-
-    # 5. 尝试匹配 model_urls.json 中的下载链接
-    url_map = load_model_urls()
-    matched = {}
-    unmatched = {}
-    for cat, names in missing.items():
-        for n in names:
-            if n in url_map:
-                matched.setdefault(cat, []).append((n, url_map[n]))
-            else:
-                unmatched.setdefault(cat, []).append(n)
-
-    if unmatched:
-        print("以下模型无下载链接，请在 model_urls.json 中补充：")
-        print(f"  文件位置: {MODEL_URLS_FILE}\n")
-        for cat, names in unmatched.items():
-            for n in names:
-                print(f'  "{n}": "",  [{cat}]')
-        print()
-
-    if not matched:
-        print("没有可下载的模型，请先配置 model_urls.json")
-        ssh.close()
-        return
-
-    # 6. 下载
-    print("开始下载缺失模型（wget 断点续传）...\n")
+    # 5. 下载
     ok = fail = 0
-    for cat, items in matched.items():
-        remote_dir = MODEL_DIR_MAP.get(cat)
-        if not remote_dir:
-            print(f"跳过未知类别 {cat}")
-            continue
+    for i, item in enumerate(download_list, 1):
+        name = item["name"]
+        url = item["url"]
+        remote_dir = item["remote_dir"]
+        cat = item["category"]
+
+        print(f"[{i}/{len(download_list)}] [{cat}] {name}")
+
         # 确保目录存在
         ssh.exec_command(f"mkdir -p '{remote_dir}'")
-        for name, url in items:
-            print(f"  [{cat}] {name}")
-            if wget_download(ssh, cat, name, url, remote_dir):
-                ok += 1
-            else:
-                fail += 1
+
+        # 检查是否已存在
+        _, stdout, _ = ssh.exec_command(f"test -f '{remote_dir}/{name}' && echo EXISTS || echo MISSING")
+        if stdout.read().decode().strip() == "EXISTS":
+            print(f"  已存在，跳过")
+            continue
+
+        if wget_download(ssh, name, url, remote_dir):
+            ok += 1
+        else:
+            fail += 1
+        time.sleep(0.5)
 
     print(f"\n完成: 成功 {ok} 个, 失败 {fail} 个")
     ssh.close()

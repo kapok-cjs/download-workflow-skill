@@ -19,9 +19,8 @@ metadata:
 1.  **用户提供关键词**
 2.  **智能体询问**: "成果工作目录指向？"
 3.  **智能体询问**："使用liblib.art搜索还是running.cn搜索？"
-4.  **liblib.art** -> `python3 scripts/search_workflow_liblib.py`、`python3 scripts/download_workflow_liblib.py` 、`python3 scripts/missing_model_gpuserver.py`、`python3 scripts/search_model_liblib.py`、`python3 scripts/download_model_liblib.py`
-5.  **runninghub.cn** -> `python3 scripts/search_workflow_runninghub.py`、`python3 scripts/download_workflow_runninghub.py`、`python3 scripts/missing_model_gpuserver.py`、`python3 scripts/search_model_runninghub.py`、`python3 scripts/download_model_runninghub.py`
-6.  **对比服务器找出缺失模型，搜索下载模型** -> `python3 scripts/download_model.py`
+4.  **liblib.art** -> `python3 scripts/search_workflow_liblib.py`、`python3 scripts/download_workflow_liblib.py` 、`python3 scripts/missing_model_gpuserver.py`、`python3 scripts/search_model_liblib.py`、`python3 scripts/search_model_google.py`、`python3 scripts/analysis_mission_model.py`、`python3 scripts/download_model_liblib.py`、`python3 scripts/download_model.py`、`python3 scripts/mission_node_gpuserver.py`、`python3 scripts/download_node.py`
+5.  **runninghub.cn** -> `python3 scripts/search_workflow_runninghub.py`、`python3 scripts/download_workflow_runninghub.py`、`python3 scripts/missing_model_gpuserver.py`、`python3 scripts/search_model_runninghub.py`、`python3 scripts/search_model_google.py`、`python3 scripts/analysis_mission_model.py`、`python3 scripts/download_model_runninghub.py`、`python3 scripts/download_model.py`、`python3 scripts/mission_node_gpuserver.py`、`python3 scripts/download_node.py`
 
 ## scripts
 
@@ -32,8 +31,13 @@ metadata:
 * `scripts/missing_model_gpuserver.py` - 对比服务器找出缺失模型，需要提供gpu server服务器ssh ip、用户名、密码
 * `scripts/search_model_liblib.py` - 搜索模型liblib.art
 * `scripts/search_model_runninghub.py` - 搜索模型runninghub.cn
+* `scripts/search_model_google.py` - 搜索模型google.com
+* `scripts/analysis_mission_model.py` - 分析搜索结果，找出最优下载连接
 * `scripts/download_model_liblib.py` - 下载模型liblib.art
 * `scripts/download_model_runninghub.py` - 下载模型runninghub.cn
+* `scripts/download_model.py` - 下载模型到gpu server
+* `scripts/mission_node_gpuserver.py` - 对比服务器找出缺失节点
+* `scripts/download_node.py` - 下载安装节点
 
 ## 使用说明
 
@@ -59,12 +63,26 @@ python3 scripts/search_model_liblib.py
 # 搜索模型runninghub.cn
 python3 scripts/search_model_runninghub.py
 
+# 搜索模型google.com
+python3 scripts/search_model_google.py
+
+# 分析搜索结果，找出最优下载连接
+python3 scripts/analysis_mission_model.py
+
 # 下载模型liblib.art
 python3 scripts/download_model_liblib.py
 
 # 下载模型runninghub.cn
 python3 scripts/download_model_runninghub.py
 
+# 在远程gpu server上使用wget下载模型
+python3 scripts/download_model.py
+
+# 对比服务器找出缺失节点
+python3 scripts/mission_node_gpuserver.py
+
+# 下载安装节点
+python3 scripts/download_node.py
 
 ```
 
